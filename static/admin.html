@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>硅基 KEY 池 - 管理</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --secondary-color: #3b82f6;
+            --success-color: #10b981;
+            --danger-color: #ef4444;
+            --background-color: #f8fafc;
+            --border-color: #e2e8f0;
+            --text-color: #1e293b;
+            --text-secondary: #64748b;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            margin: 2rem auto;
+            padding: 0 1rem;
+            max-width: 1000px;
+            background-color: var(--background-color);
+            color: var(--text-color);
+        }
+
+        .header-title {
+            display: flex;
+            align-items: center;
+        }
+
+        .logo {
+            width: 40px;
+            height: 40px;
+            margin-right: 12px;
+        }
+
+        h1 {
+            color: var(--primary-color);
+            font-size: 2.2rem;
+            margin: 0;
+            font-weight: 600;
+            letter-spacing: -0.5px;
+        }
+
+        textarea {
+            width: 100%;
+            height: 200px;
+            padding: 1rem;
+            border: 2px solid #cbd5e1;
+            border-radius: 8px;
+            margin: 1rem 0;
+            resize: vertical;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            transition: border-color 0.3s ease;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        textarea::placeholder {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            color: #64748b;
+            opacity: 1;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 0.8rem;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin: 1.5rem 0;
+        }
+
+        button {
+            padding: 0.8rem 1.5rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        button.primary {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        button.secondary {
+            background-color: #64748b;
+            color: white;
+        }
+
+        button.danger {
+            background-color: var(--danger-color);
+            color: white;
+        }
+
+        button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        #message {
+            margin: 1rem 0;
+            padding: 0.8rem;
+            border-radius: 6px;
+            font-weight: 500;
+            display: none;
+        }
+
+        #message.success {
+            background-color: #dcfce7;
+            color: #166534;
+            border: 1px solid #22c55e;
+            display: block;
+        }
+
+        #message.error {
+            background-color: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #ef4444;
+            display: block;
+        }
+
+        #stats {
+            padding: 1rem;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+            margin: 2rem 0;
+            font-size: 1.1rem;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1rem;
+            margin-top: 0.5rem;
+        }
+
+        .stat-item {
+            background-color: #f8fafc;
+            padding: 0.8rem;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-bottom: 0.3rem;
+        }
+
+        .stat-value {
+            font-size: 1.4rem;
+            font-weight: 600;
+            color: var(--primary-color);
+        }
+
+        .logs-container {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+            overflow: hidden;
+            margin: 2rem 0;
+        }
+
+        .logs-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .logs-title {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #475569;
+            margin: 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th {
+            background-color: #f8fafc;
+            font-weight: 600;
+            color: #475569;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover td {
+            background-color: #f1f5f9;
+        }
+
+        .token-cell {
+            font-family: 'Courier New', monospace;
+            font-weight: 600;
+        }
+
+        .input-token {
+            color: #0891b2;
+        }
+
+        .output-token {
+            color: #0e7490;
+        }
+
+        .total-token {
+            color: #0369a1;
+        }
+
+        .model-badge {
+            display: inline-block;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            background-color: #e0f2fe;
+            color: #0369a1;
+            font-weight: 500;
+        }
+
+        .key-cell {
+            max-width: 180px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .key-cell:hover {
+            background-color: #f1f5f9;
+        }
+
+        .key-cell:active {
+            background-color: #e2e8f0;
+        }
+
+        .key-cell::after {
+            content: "点击复制";
+            position: absolute;
+            top: 0;
+            right: 0;
+            background-color: rgba(37, 99, 235, 0.1);
+            color: var(--primary-color);
+            font-size: 0.7rem;
+            padding: 0.2rem 0.4rem;
+            border-radius: 0 0 0 4px;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .key-cell:hover::after {
+            opacity: 1;
+        }
+
+        .empty-state {
+            padding: 3rem 1rem;
+            text-align: center;
+            color: var(--text-secondary);
+        }
+
+        .empty-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        .empty-message {
+            font-size: 1.1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .empty-description {
+            font-size: 0.9rem;
+            max-width: 400px;
+            margin: 0 auto;
+        }
+
+        .loading-state {
+            padding: 2rem;
+            text-align: center;
+            color: var(--text-secondary);
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 0.5rem;
+            margin: 1.5rem 0;
+            padding: 0.5rem;
+        }
+
+        .pagination button {
+            padding: 0.5rem 1rem;
+            background-color: white;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            color: #475569;
+            min-width: 2.5rem;
+        }
+
+        .pagination button:disabled {
+            background-color: #f1f5f9;
+            color: #94a3b8;
+            cursor: not-allowed;
+            font-weight: 600;
+        }
+
+        .pagination button:not(:disabled):hover {
+            background-color: #f1f5f9;
+        }
+
+        .header-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .nav-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            padding: 0.5rem 0.8rem;
+            border-radius: 4px;
+            transition: all 0.2s ease;
+        }
+
+        .nav-link:hover {
+            background-color: rgba(37, 99, 235, 0.1);
+            color: var(--primary-color);
+        }
+
+        .nav-link.active {
+            color: var(--primary-color);
+            font-weight: 500;
+        }
+
+        .logout-btn {
+            color: var(--danger-color);
+            text-decoration: none;
+            padding: 0.5rem 0.8rem;
+            border-radius: 4px;
+            transition: all 0.2s ease;
+        }
+
+        .logout-btn:hover {
+            background-color: rgba(239, 68, 68, 0.1);
+        }
+
+        .time-cell {
+            white-space: nowrap;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 1rem;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            table {
+                font-size: 0.9rem;
+            }
+
+            th, td {
+                padding: 0.8rem 0.5rem;
+            }
+
+            .key-cell {
+                max-width: 100px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .logs-container {
+                overflow-x: auto;
+            }
+
+            table {
+                min-width: 600px;
+            }
+        }
+
+        .copy-toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #334155;
+            color: white;
+            padding: 0.6rem 1.2rem;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+        }
+        
+        .copy-toast.show {
+            opacity: 1;
+        }
+
+        /* 添加导入结果样式 */
+        .import-details {
+            margin-top: 0.5rem;
+            font-size: 0.9rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.3rem;
+        }
+        
+        .import-success {
+            color: #047857;
+        }
+        
+        .import-duplicate {
+            color: #b45309;
+        }
+        
+        .import-invalid {
+            color: #b91c1c;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header-actions">
+        <div class="header-title">
+            <img src="/favicon.svg" alt="硅基 KEY 池 Logo" class="logo">
+            <h1>硅基流动 KEY 池管理</h1>
+        </div>
+        <div class="nav-links">
+            <a href="/admin" class="nav-link active">首页</a>
+            <a href="/keys" class="nav-link">密钥管理</a>
+            <a href="/logout" class="logout-btn">退出登录</a>
+        </div>
+    </div>
+
+    <textarea id="keys" placeholder="请每行输入一个 API Key..."></textarea>
+
+    <div class="button-group">
+        <button class="primary" onclick="importKeys()">📥 导入 KEY</button>
+        <button class="secondary" onclick="refreshKeys()">🔄 刷新</button>
+        <button class="secondary" onclick="exportKeys()">📤 导出为 TXT</button>
+    </div>
+
+    <div id="message"></div>
+
+    <div id="stats">
+        <h2>📊 系统统计</h2>
+        <div class="stats-grid">
+            <div class="stat-item">
+                <div class="stat-label">当前 KEY 数量</div>
+                <div class="stat-value" id="keyCount">0</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">活跃 KEY</div>
+                <div class="stat-value" id="activeKeys">0</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">总请求数</div>
+                <div class="stat-value" id="totalRequests">0</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">总 Token 消耗</div>
+                <div class="stat-value" id="totalTokens">0</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">余额总量</div>
+                <div class="stat-value" id="totalBalance">0</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="logs-container">
+        <div class="logs-header">
+            <h2 class="logs-title">📝 最近调用日志</h2>
+            <button class="danger" onclick="clearLogs()">🗑️ 清空日志</button>
+        </div>
+        <div id="logsTableContainer">
+            <table id="logsTable">
+                <thead>
+                    <tr>
+                        <th>使用的 Key</th>
+                        <th>模型</th>
+                        <th>调用时间</th>
+                        <th>输入 Token</th>
+                        <th>输出 Token</th>
+                        <th>总 Token</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+        <div class="pagination" id="pagination"></div>
+    </div>
+
+    <div id="copyToast" class="copy-toast">已复制到剪贴板</div>
+
+    <script>
+        async function showMessage(text, type = 'success') {
+            const messageEl = document.getElementById('message');
+            messageEl.textContent = text;
+            messageEl.className = type;
+            messageEl.style.display = 'block';
+            setTimeout(() => messageEl.style.display = 'none', 3000);
+        }
+        
+        // 确保 admin.html 中的 formatBalance 函数与 keys.html 中的完全相同
+        function formatBalance(balance) {
+            // 先转换为数字，然后格式化为固定的 4 位小数
+            return parseFloat(parseFloat(balance).toFixed(4)).toFixed(4);
+        }
+        
+        async function fetchStats() {
+            try {
+                const response = await fetch('/stats');
+                const data = await response.json();
+                
+                document.getElementById('keyCount').textContent = data.totalKeys || 0;
+                document.getElementById('activeKeys').textContent = data.activeKeys || 0;
+                document.getElementById('totalRequests').textContent = data.totalRequests || 0;
+                document.getElementById('totalTokens').textContent = data.totalTokens ? data.totalTokens.toLocaleString() : 0;
+                
+                // 确保余额显示一致
+                const balance = parseFloat(data.totalBalance || 0);
+                document.getElementById('totalBalance').textContent = formatBalance(balance);
+            } catch (error) {
+                console.error("Error fetching stats:", error);
+                showMessage("获取统计信息失败: " + error.message, "error");
+            }
+        }
+        
+        async function importKeys() {
+            try {
+                const messageEl = document.getElementById("message");
+                messageEl.style.display = 'block';
+                messageEl.textContent = "正在导入，请稍候...";
+                messageEl.className = "success";
+                
+                const keysText = document.getElementById("keys").value;
+                const keys = keysText.split('\n').map(k => k.trim()).filter(k => k);
+                
+                if (keys.length === 0) {
+                    showMessage("请输入至少一个 API Key", "error");
+                    return;
+                }
+                
+                const response = await fetch("/import_keys", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ keys })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                // 构建详细的导入结果消息
+                let resultMessage = data.message;
+                
+                // 如果有详细的导入统计信息，显示更友好的消息
+                if (data.importStats) {
+                    const stats = data.importStats;
+                    
+                    // 创建带颜色的详细统计信息
+                    let detailsHtml = `<div class="import-details">`;
+                    
+                    if (stats.imported > 0) {
+                        detailsHtml += `<div class="import-success">✅ 成功导入: ${stats.imported} 个</div>`;
+                    }
+                    
+                    if (stats.duplicates > 0) {
+                        detailsHtml += `<div class="import-duplicate">⚠️ 已存在: ${stats.duplicates} 个</div>`;
+                    }
+                    
+                    if (stats.invalid > 0) {
+                        detailsHtml += `<div class="import-invalid">❌ 无效密钥: ${stats.invalid} 个</div>`;
+                    }
+                    
+                    detailsHtml += `</div>`;
+                    
+                    // 设置消息内容，包含 HTML
+                    messageEl.innerHTML = `${resultMessage}<br>${detailsHtml}`;
+                } else {
+                    // 如果没有详细统计，只显示基本消息
+                    messageEl.textContent = resultMessage;
+                }
+                
+                // 更新统计信息
+                if (data.stats) {
+                    document.getElementById("keyCount").textContent = data.stats.totalKeys || 0;
+                    document.getElementById("activeKeys").textContent = data.stats.activeKeys || 0;
+                    document.getElementById("totalBalance").textContent = data.stats.totalBalance || 0;
+                } else {
+                    fetchStats();
+                }
+                
+                // 清空输入框
+                if (stats.imported > 0) {
+                    document.getElementById("keys").value = "";
+                }
+            } catch (error) {
+                console.error("Error importing keys:", error);
+                showMessage("导入失败: " + error.message, "error");
+            }
+        }
+        
+        async function refreshKeys() {
+            try {
+                showMessage("正在刷新，请稍候...");
+                const response = await fetch("/refresh", { method: "POST" });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                showMessage(data.message, "success");
+                
+                if (data.stats) {
+                    document.getElementById("keyCount").textContent = data.stats.totalKeys || 0;
+                    document.getElementById("activeKeys").textContent = data.stats.activeKeys || 0;
+                    document.getElementById("totalBalance").textContent = data.stats.totalBalance || 0;
+                } else {
+                    fetchStats();
+                }
+            } catch (error) {
+                console.error("Error refreshing keys:", error);
+                showMessage("刷新失败: " + error.message, "error");
+            }
+        }
+        
+        async function exportKeys() {
+            try {
+                // 显示加载消息
+                showMessage("正在准备导出数据...", "success");
+                
+                // 获取所有 API Keys
+                const response = await fetch("/export_keys");
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                if (!data.keys || !Array.isArray(data.keys) || data.keys.length === 0) {
+                    showMessage("没有可导出的 API Keys", "error");
+                    return;
+                }
+                
+                // 提取所有 key 值并组成文本内容
+                const keysText = data.keys
+                    .filter(keyObj => keyObj && keyObj.key) // 确保 key 存在
+                    .map(keyObj => keyObj.key)              // 只提取 key 字段
+                    .join('\n');                            // 每行一个 key
+                
+                // 创建 Blob 对象
+                const blob = new Blob([keysText], { type: 'text/plain' });
+                
+                // 创建下载链接
+                const url = URL.createObjectURL(blob);
+                
+                // 生成带时间戳的文件名
+                const now = new Date();
+                const timestamp = `${now.getFullYear()}${padZero(now.getMonth() + 1)}${padZero(now.getDate())}_${padZero(now.getHours())}${padZero(now.getMinutes())}`;
+                const filename = `silicon_keys_${timestamp}.txt`;
+                
+                // 创建下载链接并触发点击
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                
+                // 清理
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    showMessage(`已导出 ${data.keys.length} 个 API Keys`, "success");
+                }, 100);
+                
+            } catch (error) {
+                console.error("Error exporting keys:", error);
+                showMessage("导出失败: " + error.message, "error");
+            }
+        }
+        
+        // 辅助函数：数字补零
+        function padZero(num) {
+            return num.toString().padStart(2, '0');
+        }
+        
+        // 格式化日期时间
+        function formatDateTime(timestamp) {
+            const dt = new Date(timestamp * 1000);
+            const now = new Date();
+            const isToday = dt.getDate() === now.getDate() && 
+                           dt.getMonth() === now.getMonth() && 
+                           dt.getFullYear() === now.getFullYear();
+            
+            const options = { hour: '2-digit', minute: '2-digit', second: '2-digit' };
+            
+            if (isToday) {
+                return `今天 ${dt.toLocaleTimeString([], options)}`;
+            } else {
+                return dt.toLocaleString([], {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    ...options
+                });
+            }
+        }
+        
+        // 格式化 API Key 显示
+        function formatApiKey(key) {
+            if (!key) return '—';
+            if (key.length <= 10) return key;
+            return key.substring(0, 4) + '...' + key.substring(key.length - 6);
+        }
+        
+        // 添加复制功能
+        function copyToClipboard(text) {
+            if (!text) return;
+            
+            // 创建临时文本区域
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            
+            // 选择并复制文本
+            textarea.select();
+            let success = false;
+            try {
+                success = document.execCommand('copy');
+            } catch (err) {
+                console.error('复制失败:', err);
+            }
+            
+            // 移除临时元素
+            document.body.removeChild(textarea);
+            
+            // 显示提示
+            if (success) {
+                showCopyToast();
+            }
+            
+            return success;
+        }
+        
+        // 显示复制成功提示
+        function showCopyToast() {
+            const toast = document.getElementById('copyToast');
+            toast.classList.add('show');
+            
+            // 2秒后隐藏提示
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 2000);
+        }
+        
+        // 日志获取和分页
+        async function fetchLogs(page = 1) {
+            const tableContainer = document.getElementById("logsTableContainer");
+            const tbody = document.querySelector("#logsTable tbody");
+            
+            // 显示加载状态
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="6" class="loading-state">
+                        <div>⏳ 正在加载日志...</div>
+                    </td>
+                </tr>
+            `;
+            
+            try {
+                const response = await fetch(`/logs?page=${page}`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                tbody.innerHTML = "";
+                
+                if (!data.logs || data.logs.length === 0) {
+                    // 显示空状态
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="6" class="empty-state">
+                                <div class="empty-icon">📭</div>
+                                <div class="empty-message">暂无调用日志</div>
+                                <div class="empty-description">当有 API 调用时，日志将显示在这里</div>
+                            </td>
+                        </tr>
+                    `;
+                } else {
+                    // 渲染日志数据
+                    data.logs.forEach(log => {
+                        const tr = document.createElement("tr");
+                        tr.innerHTML = `
+                            <td class="key-cell" title="点击复制: ${log.used_key || ''}" data-key="${log.used_key || ''}">${formatApiKey(log.used_key)}</td>
+                            <td><span class="model-badge">${log.model || '未知模型'}</span></td>
+                            <td class="time-cell">${formatDateTime(log.call_time)}</td>
+                            <td class="token-cell input-token">${log.input_tokens.toLocaleString()}</td>
+                            <td class="token-cell output-token">${log.output_tokens.toLocaleString()}</td>
+                            <td class="token-cell total-token">${log.total_tokens.toLocaleString()}</td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                    
+                    // 添加复制事件监听器
+                    document.querySelectorAll('.key-cell').forEach(cell => {
+                        cell.addEventListener('click', function() {
+                            const key = this.getAttribute('data-key');
+                            if (key) {
+                                copyToClipboard(key);
+                            }
+                        });
+                    });
+                    
+                    // 更新分页按钮
+                    updatePagination(data.page, data.total, data.page_size);
+                }
+            } catch (error) {
+                console.error("Error fetching logs:", error);
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="empty-state">
+                            <div class="empty-icon">⚠️</div>
+                            <div class="empty-message">获取日志失败</div>
+                            <div class="empty-description">${error.message}</div>
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+        
+        // 更新分页控件
+        function updatePagination(currentPage, totalItems, pageSize) {
+            const paginationDiv = document.getElementById("pagination");
+            paginationDiv.innerHTML = "";
+            
+            if (totalItems === 0) return;
+            
+            const totalPages = Math.ceil(totalItems / pageSize);
+            
+            // 添加上一页按钮
+            const prevBtn = document.createElement("button");
+            prevBtn.innerHTML = "←";
+            prevBtn.disabled = currentPage === 1;
+            prevBtn.onclick = () => fetchLogs(currentPage - 1);
+            paginationDiv.appendChild(prevBtn);
+            
+            // 计算要显示的页码范围
+            let startPage = Math.max(1, currentPage - 2);
+            let endPage = Math.min(totalPages, startPage + 4);
+            
+            if (endPage - startPage < 4) {
+                startPage = Math.max(1, endPage - 4);
+            }
+            
+            // 添加页码按钮
+            for (let i = startPage; i <= endPage; i++) {
+                const btn = document.createElement("button");
+                btn.textContent = i;
+                btn.disabled = i === currentPage;
+                btn.onclick = () => fetchLogs(i);
+                paginationDiv.appendChild(btn);
+            }
+            
+            // 添加下一页按钮
+            const nextBtn = document.createElement("button");
+            nextBtn.innerHTML = "→";
+            nextBtn.disabled = currentPage === totalPages;
+            nextBtn.onclick = () => fetchLogs(currentPage + 1);
+            paginationDiv.appendChild(nextBtn);
+        }
+        
+        async function clearLogs() {
+            if (!confirm("确定要清空所有日志吗？此操作无法撤销。")) return;
+            
+            try {
+                const response = await fetch("/clear_logs", { method: "POST" });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                showMessage(data.message || "日志已清空", "success");
+                fetchLogs();
+                fetchStats();
+            } catch (error) {
+                console.error("Error clearing logs:", error);
+                showMessage("清空日志失败: " + error.message, "error");
+            }
+        }
+        
+        // 页面加载时初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchStats();
+            fetchLogs();
+        });
+    </script>
+</body>
+
+</html>
