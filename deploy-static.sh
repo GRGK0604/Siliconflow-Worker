@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # 环境参数，默认为本地
-ENV=${1:-"local"}
+ENV=${1:-"production"}
 
 echo "正在部署静态文件到 $ENV 环境..."
 
