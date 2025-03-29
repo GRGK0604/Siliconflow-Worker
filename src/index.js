@@ -11,7 +11,7 @@
 // 添加必要的导入
 import { nanoid } from 'nanoid';
 import { handleChatCompletions, handleModels } from './api-proxy.js';
-import { importApiKeys, exportApiKeys, refreshApiKeys, getApiKeysDetails, refreshSingleApiKey, refreshBatchApiKeys, updateApiKeyStatus, refreshAllKeys, updateKeysStatus, deleteZeroBalanceKeys } from './key-management.js';
+import { importApiKeys, exportApiKeys, refreshApiKeys, getApiKeysDetails, refreshSingleApiKey, refreshBatchApiKeys, updateApiKeyStatus, refreshAllKeys, updateKeysStatus, deleteZeroBalanceKeys, scheduledRefresh } from './key-management.js';
 import { handleAdminLogin, handleAdminLogout, getStats, getLogs, clearLogs } from './admin.js';
 import { getAssetFromKV } from '@cloudflare/kv-asset-handler';
 
@@ -547,5 +547,13 @@ export default {
       
       return serveErrorPage(request, statusCode, env, ctx);
     }
+  },
+  
+  // 添加定时任务处理函数
+  async scheduled(event, env, ctx) {
+    console.log('Running scheduled task:', event.cron);
+    
+    // 执行API密钥刷新
+    await scheduledRefresh(env);
   }
 };

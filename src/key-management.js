@@ -51,7 +51,7 @@ export async function validateApiKey(apiKey) {
   }
 }
 
-// 导入 API 密钥
+// 导入 API 密钥 - 修改为分批导入
 export async function importApiKeys(request, env) {
   try {
     const data = await request.json();
@@ -59,15 +59,33 @@ export async function importApiKeys(request, env) {
     
     if (!Array.isArray(keys) || keys.length === 0) {
       return new Response(JSON.stringify({
-        error: '未提供有效的密钥'
+        error: '未提供有效的密钥'  
       }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
       });
     }
     
-    // 导入密钥并获取详细统计信息
-    const importStats = await addKeysToDatabase(keys, env);
+    // 分批导入密钥,每批最多20个
+    const batchSize = 20;
+    let totalImported = 0;
+    let totalBalance = 0;
+    let totalDuplicates = 0;
+    let totalInvalid = 0;
+    
+    for (let i = 0; i < keys.length; i += batchSize) {
+      const batch = keys.slice(i, i + batchSize);
+      
+      // 导入当前批次密钥并获取统计信息
+      const importStats = await addKeysToDatabase(batch, env);
+      totalImported += importStats.imported;
+      totalBalance += importStats.totalBalance;
+      totalDuplicates += importStats.duplicates;
+      totalInvalid += importStats.invalid;
+      
+      // 将导入结果写入KV存储,防止中途失败
+      await env.KV_IMPORT_RESULT.put(`import-${Date.now()}`, JSON.stringify(importStats));
+    }
     
     // 获取更新后的统计信息
     const totalKeysCount = await env.DB.prepare(
@@ -78,20 +96,17 @@ export async function importApiKeys(request, env) {
       'SELECT COUNT(*) as count FROM api_keys WHERE is_active = 1'
     ).first();
     
-    const totalBalance = await env.DB.prepare(
+    const totalBalanceDB = await env.DB.prepare(
       'SELECT ROUND(SUM(balance), 4) as sum FROM api_keys WHERE is_active = 1'
     ).first();
     
     // 构建友好的消息
-    let message = `处理了 ${keys.length} 个密钥`;
-    if (importStats.imported > 0) {
-      message += `，成功导入 ${importStats.imported} 个`;
+    let message = `处理了 ${keys.length} 个密钥,成功导入 ${totalImported} 个,新增余额 ${totalBalance.toFixed(4)} 元`;
+    if (totalDuplicates > 0) {
+      message += `，${totalDuplicates} 个已存在`;
     }
-    if (importStats.duplicates > 0) {
-      message += `，${importStats.duplicates} 个已存在`;
-    }
-    if (importStats.invalid > 0) {
-      message += `，${importStats.invalid} 个无效`;
+    if (totalInvalid > 0) {
+      message += `，${totalInvalid} 个无效`;
     }
     
     return new Response(JSON.stringify({
@@ -99,17 +114,23 @@ export async function importApiKeys(request, env) {
       stats: {
         totalKeys: totalKeysCount.count || 0,
         activeKeys: activeKeysCount.count || 0,
-        totalBalance: parseFloat(totalBalance.sum || 0).toFixed(4)
+        totalBalance: (parseFloat(totalBalanceDB.sum || 0) + totalBalance).toFixed(4)
       },
-      importStats: importStats
+      importStats: {
+        total: keys.length,
+        imported: totalImported,
+        duplicates: totalDuplicates,
+        invalid: totalInvalid,
+        totalBalance: totalBalance
+      }
     }), {
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'application/json' }  
     });
   } catch (error) {
     console.error('Error importing keys:', error);
     return new Response(JSON.stringify({
       error: `导入密钥失败: ${error.message}`
-    }), {
+    }), { 
       status: 500,
       headers: { 'Content-Type': 'application/json' }
     });
@@ -138,7 +159,7 @@ export async function exportApiKeys(env) {
   }
 }
 
-// 刷新 API 密钥 - 修改为批量处理时添加延迟
+// 刷新 API 密钥 - 修改为分批刷新
 export async function refreshApiKeys(env) {
   try {
     // 获取所有密钥
@@ -154,40 +175,24 @@ export async function refreshApiKeys(env) {
       });
     }
     
-    // 使用分批处理和延迟来验证密钥
-    const batchSize = 5; // 每批处理的密钥数量
-    const delay = 1000; // 批次间延迟(毫秒)
-    const validationResults = [];
+    // 分批刷新密钥,每批最多20个
+    const batchSize = 20;
+    const refreshPromises = [];
     
-    // 分批处理
     for (let i = 0; i < results.length; i += batchSize) {
       const batch = results.slice(i, i + batchSize);
       
-      // 处理当前批次
-      const batchPromises = batch.map(async (keyData) => {
-        try {
-          const validation = await validateApiKey(keyData.key);
-          
-          // 更新密钥状态和余额
-          await env.DB.prepare(
-            'UPDATE api_keys SET is_active = ?, balance = ?, last_check_time = ? WHERE id = ?'
-          ).bind(validation.valid ? 1 : 0, validation.balance || 0, Date.now(), keyData.id).run();
-          
-          return { key: keyData.key, valid: validation.valid, balance: validation.balance };
-        } catch (error) {
-          console.error(`Error validating key ${keyData.key}:`, error);
-          return { key: keyData.key, valid: false, error: error.message };
-        }
-      });
-      
-      // 等待当前批次完成
-      const batchResults = await Promise.all(batchPromises);
-      validationResults.push(...batchResults);
-      
-      // 如果不是最后一批，添加延迟
-      if (i + batchSize < results.length) {
-        await new Promise(resolve => setTimeout(resolve, delay));
-      }
+      // 刷新当前批次的密钥
+      const batchPromise = refreshKeysBatch(batch, env);
+      refreshPromises.push(batchPromise);
+    }
+    
+    // 等待所有批次刷新完成
+    const refreshResults = await Promise.all(refreshPromises);
+    
+    // 将刷新结果写入KV存储
+    if (env.KV_REFRESH_RESULT) {
+      await env.KV_REFRESH_RESULT.put(`refresh-${Date.now()}`, JSON.stringify(refreshResults));
     }
     
     // 获取更新后的统计信息
@@ -205,7 +210,7 @@ export async function refreshApiKeys(env) {
     
     return new Response(JSON.stringify({
       message: '密钥刷新成功',
-      results: validationResults,
+      results: refreshResults,
       stats: {
         totalKeys: totalKeysCount.count || 0,
         activeKeys: activeKeysCount.count || 0,
@@ -215,8 +220,9 @@ export async function refreshApiKeys(env) {
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (error) {
+    console.error('Error refreshing API keys:', error);
     return new Response(JSON.stringify({
-      error: `刷新密钥失败: ${error.message}`
+      error: `刷新密钥失败: ${error.message}` 
     }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
@@ -224,60 +230,105 @@ export async function refreshApiKeys(env) {
   }
 }
 
-// 添加密钥到数据库 - 修改为串行处理
+// 刷新一批密钥
+async function refreshKeysBatch(batch, env) {
+  const validationResults = await Promise.all(batch.map(async (keyData) => {
+    try {
+      const validation = await validateApiKey(keyData.key);
+      
+      // 更新密钥状态和余额
+      await env.DB.prepare(
+        'UPDATE api_keys SET is_active = ?, balance = ?, last_check_time = ? WHERE id = ?'
+      ).bind(validation.valid ? 1 : 0, validation.balance || 0, Date.now(), keyData.id).run();
+      
+      return { key: keyData.key, valid: validation.valid, balance: validation.balance };
+    } catch (error) {
+      console.error(`Error validating key ${keyData.key}:`, error);
+      return { key: keyData.key, valid: false, error: error.message };  
+    }
+  }));
+  
+  return validationResults;
+}
+
+// 添加密钥到数据库 - 修改为分批写入
 async function addKeysToDatabase(keys, env) {
   // 初始化统计信息
   const stats = {
     total: keys.length,
     imported: 0,
     duplicates: 0,
-    invalid: 0
+    invalid: 0,
+    totalBalance: 0
   };
   
-  // 串行处理每个密钥，避免并发请求过多
-  for (const key of keys) {
-    try {
-      // 检查密钥是否已存在
-      const existingKey = await env.DB.prepare(
-        'SELECT key FROM api_keys WHERE key = ?'
-      ).bind(key).first();
-      
-      if (existingKey) {
-        // 密钥已存在
-        stats.duplicates++;
-        continue;
-      }
-      
-      // 验证 API 密钥
-      const validation = await validateApiKey(key);
-      
-      if (validation.valid) {
-        // 添加新密钥
-        await env.DB.prepare(
-          'INSERT INTO api_keys (id, key, created_at, add_time, last_check_time, balance, is_active, model_access) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-        ).bind(
-          nanoid(),
+  // 先验证所有密钥
+  const validationResults = await Promise.all(
+    keys.map(async (key) => {
+      try {
+        const validation = await validateApiKey(key);
+        return {
           key,
-          Date.now(),
-          Date.now(),
-          Date.now(),
-          validation.balance || 0,
-          1,
-          JSON.stringify(validation.model_access || [])
-        ).run();
-        
-        stats.imported++;
-      } else {
-        // 无效密钥
-        stats.invalid++;
+          valid: validation.valid,
+          balance: validation.balance || 0,
+          model_access: JSON.stringify(validation.model_access || [])
+        };
+      } catch (error) {
+        console.error(`Error validating key ${key}:`, error);
+        return { key, valid: false, balance: 0, model_access: '[]' };
       }
+    })
+  );
+  
+  // 检查数据库中已存在的密钥
+  const allKeys = keys.join("','");
+  const { results: existingKeys } = await env.DB.prepare(
+    `SELECT key FROM api_keys WHERE key IN ('${allKeys}')`
+  ).all();
+  
+  const existingKeySet = new Set(existingKeys.map(row => row.key));
+  
+  // 过滤出有效且不重复的密钥
+  const keysToInsert = validationResults.filter(result => 
+    result.valid && !existingKeySet.has(result.key)
+  );
+  
+  // 计算统计信息
+  stats.duplicates = existingKeySet.size;
+  stats.invalid = validationResults.filter(result => !result.valid).length;
+  
+  // 分批写入数据库
+  const batchSize = 50;
+  
+  for (let i = 0; i < keysToInsert.length; i += batchSize) {
+    const batch = keysToInsert.slice(i, i + batchSize);
+    
+    if (batch.length === 0) continue;
+    
+    // 构建批量插入的SQL
+    const placeholders = batch.map(() => '(?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
+    const values = batch.map(result => [
+      nanoid(),
+      result.key, 
+      Date.now(),
+      Date.now(), 
+      Date.now(),
+      result.balance,
+      1,
+      result.model_access
+    ]).flat();
+    
+    try {
+      // 批量插入当前批次的密钥
+      await env.DB.prepare(
+        `INSERT INTO api_keys (id, key, created_at, add_time, last_check_time, balance, is_active, model_access) VALUES ${placeholders}`  
+      ).bind(...values).run();
       
-      // 添加小延迟，避免请求过快
-      await new Promise(resolve => setTimeout(resolve, 200));
-      
+      stats.imported += batch.length;
+      stats.totalBalance += batch.reduce((sum, result) => sum + result.balance, 0);
     } catch (error) {
-      console.error(`Error importing key ${key}:`, error);
-      stats.invalid++;
+      console.error(`Error importing batch ${i}-${i+batchSize}:`, error);
+      // 这里不增加 invalid 计数，因为我们已经在前面计算过了
     }
   }
   
@@ -829,5 +880,80 @@ export async function deleteZeroBalanceKeys(env) {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
     });
+  }
+}
+
+// 添加定时刷新机制
+export async function scheduledRefresh(env) {
+  console.log('Starting scheduled API key refresh');
+  
+  try {
+    // 获取所有密钥
+    const { results } = await env.DB.prepare(
+      'SELECT * FROM api_keys'
+    ).all();
+    
+    if (!results || results.length === 0) {
+      console.log('No keys to refresh');
+      return;
+    }
+    
+    console.log(`Found ${results.length} keys to refresh`);
+    
+    // 分批刷新密钥,每批最多10个
+    const batchSize = 10;
+    const delay = 2000; // 批次间延迟(毫秒)
+    let refreshedCount = 0;
+    let activeCount = 0;
+    let totalBalance = 0;
+    
+    for (let i = 0; i < results.length; i += batchSize) {
+      const batch = results.slice(i, i + batchSize);
+      
+      // 处理当前批次
+      const batchPromises = batch.map(async (keyData) => {
+        try {
+          const validation = await validateApiKey(keyData.key);
+          
+          // 更新密钥状态和余额
+          await env.DB.prepare(
+            'UPDATE api_keys SET is_active = ?, balance = ?, last_check_time = ? WHERE id = ?'
+          ).bind(validation.valid ? 1 : 0, validation.balance || 0, Date.now(), keyData.id).run();
+          
+          if (validation.valid) {
+            activeCount++;
+            totalBalance += validation.balance || 0;
+          }
+          
+          refreshedCount++;
+          return { id: keyData.id, success: true, valid: validation.valid };
+        } catch (error) {
+          console.error(`Error refreshing key ${keyData.id}:`, error);
+          return { id: keyData.id, success: false, error: error.message };
+        }
+      });
+      
+      await Promise.all(batchPromises);
+      
+      // 如果不是最后一批，添加延迟
+      if (i + batchSize < results.length) {
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+    
+    // 将刷新结果写入KV存储
+    const refreshResult = {
+      timestamp: Date.now(),
+      total: results.length,
+      refreshed: refreshedCount,
+      active: activeCount,
+      totalBalance: totalBalance.toFixed(4)
+    };
+    
+    await env.KV_REFRESH_RESULT.put(`scheduled-refresh-${new Date().toISOString().split('T')[0]}`, JSON.stringify(refreshResult));
+    
+    console.log(`Scheduled refresh completed: ${refreshedCount}/${results.length} keys processed, ${activeCount} active, total balance: ${totalBalance.toFixed(4)}`);
+  } catch (error) {
+    console.error('Error in scheduled refresh:', error);
   }
 }
